@@ -6,8 +6,13 @@ from html import escape
 import re
 from ast import literal_eval
 import json
+import math
+from utils import BM25WithOperators
 
 st.title('Guided Topic Model Viewer')
+
+if 'page_count' not in st.session_state:
+    st.session_state['page_count'] = 0
 
 @st.cache_resource
 def load_tokenizer():
@@ -92,25 +97,37 @@ if uploaded_file is not None:
 
 if 'topic_df' in st.session_state:
     topic_choice = st.selectbox('Pick a topic to look at more closely', list(st.session_state['topic_df'].topic.unique()))
+    # page_size = st.number_input("Results per page", min_value=1, value=5)
     st.markdown(f"#### Topic: **{topic_choice.replace('<|eot_id|>', '')}**")
     selected_df = st.session_state['topic_df'][st.session_state['topic_df'].topic == topic_choice]
     fnames = list(selected_df.filename.unique())
-    tabs = st.tabs([u.replace('.pdf', '').split('/')[-1].replace('"', '') for u in fnames])
     
-    for i, tab in enumerate(tabs):
-        with tab:
-            for j, row in selected_df[selected_df.filename == fnames[i]].iterrows():
-                text = row['chunk']
-                lexical_weights = row['lexical_weights']
-                
-                highlighted_text = highlight_text(text, lexical_weights, tokenizer_dict)
-                st.markdown(highlighted_text.replace("<p>","").replace("</p>",""), unsafe_allow_html=True)
-                st.divider()
-            # rerank_list = reranker.rank(topic_choice, list(selected_df[selected_df.filename == fnames[i]].chunk.unique()))
-            # for d in rerank_list:
-            #     chunk = st.session_state['topic_df'].iloc[d['corpus_id']]['chunk']
-            #     st.write(markdown(chunk, raw_html=True).replace("<p>","").replace("</p>",""))
-            #     st.divider()
+    docs = selected_df.chunk.to_list()
+    bm25 = BM25WithOperators(docs)
+    st.write("Search documents in this topic by keyword")
+    query = st.text_input("Enter a query")
+    if query:
+        results = bm25.search(query)
+        for result in results:
+            row = selected_df[selected_df.chunk == result['text']]
+            lexical_weights = row['lexical_weights'].values[0]
+            highlighted_text = highlight_text(row['chunk'].values[0], lexical_weights, tokenizer_dict)
+            st.markdown(f"**Document: {row.filename.values[0]}**")
+            st.markdown(highlighted_text.replace("<p>","").replace("</p>",""), unsafe_allow_html=True)
+            st.divider()
+
+    if not query:
+        st.write("Or browse by filename")
+        tabs = st.tabs([u.replace('.pdf', '').split('/')[-1].replace('"', '') for u in fnames])
+        for i, tab in enumerate(tabs):
+            with tab:
+                # st.session_state['pages'] = [self.limited_results[i:i + to_see] for i in range(0, len(self.limited_results), to_see)]
+                for j, row in selected_df[selected_df.filename == fnames[i]].iterrows():
+                    text = row['chunk']
+                    lexical_weights = row['lexical_weights']
+                    highlighted_text = highlight_text(text, lexical_weights, tokenizer_dict)
+                    st.markdown(highlighted_text.replace("<p>","").replace("</p>",""), unsafe_allow_html=True)
+                    st.divider()
 
     if st.button('Export data'):
         with st.spinner("Exporting data"):
