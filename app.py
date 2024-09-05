@@ -160,7 +160,7 @@ if 'topic_df' in st.session_state:
             if query:
                 doc.add_heading(f"{topic_choice} - search results for '{query}'", 0)
             else:
-                doc.add_heading(f"{topic_choice} - {fnames[i]}", 0)
+                doc.add_heading(f"{topic_choice} - {file_to_export}", 0)
             p = doc.add_paragraph(f"{date.today()}")
             p.italic = True
             for i, row in selected_df_for_export.dropna().iterrows():
