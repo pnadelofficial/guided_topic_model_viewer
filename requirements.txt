@@ -4,3 +4,4 @@ python-docx
 markdown
 openpyxl
 rank_bm25
+xlsxwriter

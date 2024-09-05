@@ -6,7 +6,6 @@ from html import escape
 import re
 from ast import literal_eval
 import json
-import math
 from utils import BM25WithOperators
 
 st.title('Guided Topic Model Viewer')
@@ -95,6 +94,8 @@ if uploaded_file is not None:
     if 'topic_df' not in st.session_state:
         st.session_state['topic_df'] = df
 
+highlight_cb = st.checkbox("Highlight text")
+
 if 'topic_df' in st.session_state:
     topic_choice = st.selectbox('Pick a topic to look at more closely', list(st.session_state['topic_df'].topic.unique()))
     # page_size = st.number_input("Results per page", min_value=1, value=5)
@@ -111,9 +112,13 @@ if 'topic_df' in st.session_state:
         for result in results:
             row = selected_df[selected_df.chunk == result['text']]
             lexical_weights = row['lexical_weights'].values[0]
-            highlighted_text = highlight_text(row['chunk'].values[0], lexical_weights, tokenizer_dict)
-            st.markdown(f"**Document: {row.filename.values[0]}**")
-            st.markdown(highlighted_text.replace("<p>","").replace("</p>",""), unsafe_allow_html=True)
+            if highlight_cb:
+                highlighted_text = highlight_text(result['text'], lexical_weights, tokenizer_dict)
+                st.markdown(f"**Document: {row.filename.values[0]}**")
+                st.markdown(highlighted_text.replace("<p>","").replace("</p>",""), unsafe_allow_html=True)
+            else:
+                st.markdown(f"**Document: {row.filename.values[0]}**")
+                st.markdown(result['text'].replace("<p>","").replace("</p>",""), unsafe_allow_html=True)
             st.divider()
 
     if not query:
@@ -125,13 +130,60 @@ if 'topic_df' in st.session_state:
                 for j, row in selected_df[selected_df.filename == fnames[i]].iterrows():
                     text = row['chunk']
                     lexical_weights = row['lexical_weights']
-                    highlighted_text = highlight_text(text, lexical_weights, tokenizer_dict)
-                    st.markdown(highlighted_text.replace("<p>","").replace("</p>",""), unsafe_allow_html=True)
+                    if highlight_cb:
+                        highlighted_text = highlight_text(text, lexical_weights, tokenizer_dict)
+                        st.markdown(highlighted_text.replace("<p>","").replace("</p>",""), unsafe_allow_html=True)
+                    else:
+                        st.markdown(text.replace("<p>","").replace("</p>",""), unsafe_allow_html=True)
                     st.divider()
 
-    if st.button('Export data'):
+    if st.button('Export data for this file or search'):
         with st.spinner("Exporting data"):
-            xl = selected_df.to_excel(f"{topic_choice}_{date.today()}.xlsx", engine='xlsxwriter', index=False)
+            selected_df_for_export = selected_df.drop(columns=['lexical_weights', 'index'])
+            if query:
+                selected_df_for_export = selected_df_for_export[selected_df_for_export.chunk.isin([r['text'] for r in results])]
+            else:
+                selected_df_for_export = selected_df_for_export[selected_df_for_export.filename == fnames[i]]
+            
+            added = query if query else fnames[i]
+            xl = selected_df_for_export.to_excel(f"{topic_choice}_{added}_{date.today()}.xlsx", engine='xlsxwriter', index=False)
+            with open(f"{topic_choice}_{added}_{date.today()}.xlsx", 'rb') as x_file:
+                btn = st.download_button(
+                    label="Download data as Excel",
+                    data=x_file,
+                    file_name=f"{topic_choice}_{date.today()}.xlsx",
+                    key='excel_dl'
+                )
+            
+            doc = Document()
+            if query:
+                doc.add_heading(f"{topic_choice} - search results for '{query}'", 0)
+            else:
+                doc.add_heading(f"{topic_choice} - {fnames[i]}", 0)
+            p = doc.add_paragraph(f"{date.today()}")
+            p.italic = True
+            for i, row in selected_df_for_export.dropna().iterrows():
+                p = doc.add_paragraph(f"Document chunk {i+1}")
+                p.bold = True
+                doc.add_paragraph(row['filename'])
+                text = re.sub(u'[^\u0020-\uD7FF\u0009\u000A\u000D\uE000-\uFFFD\U00010000-\U0010FFFF]+', '', row['chunk'])
+                c = doc.add_paragraph(text)
+                run = c.add_run()
+                run.add_break()
+            doc.save(f"{topic_choice}_{added}_{date.today()}.docx")
+            with open(f"{topic_choice}_{added}_{date.today()}.docx", 'rb') as w_file:
+                btn = st.download_button(
+                    label="Download data as Word",
+                    data=w_file,
+                    file_name=f"{topic_choice}_{added}_{date.today()}.docx",
+                    key='word_dl'
+                )
+        st.divider()
+    
+    if st.button('Export all data for this topic'):
+        with st.spinner("Exporting data"):
+            selected_df_for_export = selected_df.drop(columns=['lexical_weights', 'index'])
+            xl = selected_df_for_export.to_excel(f"{topic_choice}_{date.today()}.xlsx", engine='xlsxwriter', index=False)
             with open(f"{topic_choice}_{date.today()}.xlsx", 'rb') as x_file:
                 btn = st.download_button(
                     label="Download data as Excel",
