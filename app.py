@@ -143,7 +143,8 @@ if 'topic_df' in st.session_state:
             if query:
                 selected_df_for_export = selected_df_for_export[selected_df_for_export.chunk.isin([r['text'] for r in results])]
             else:
-                selected_df_for_export = selected_df_for_export[selected_df_for_export.filename == fnames[i]]
+                file_to_export = st.selectbox('Pick a file to export', fnames, format_func=lambda x: x.replace('.pdf', '').split('/')[-1].replace('"', ''))
+                selected_df_for_export = selected_df_for_export[selected_df_for_export.filename == file_to_export]
             
             added = query if query else fnames[i]
             xl = selected_df_for_export.to_excel(f"{topic_choice}_{added}_{date.today()}.xlsx", engine='xlsxwriter', index=False)
